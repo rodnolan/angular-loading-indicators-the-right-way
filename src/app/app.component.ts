@@ -15,7 +15,6 @@ enum LoadingIndicator {
 @Component({
   selector: "app-root",
   templateUrl: "./app.component.html",
-  styleUrls: ["./app.component.css"]
 })
 export class AppComponent implements OnInit {
   subscriptionText = "";
@@ -52,7 +51,7 @@ export class AppComponent implements OnInit {
   protected subscriptionExample(): void {
     this.loadingService
       .doLoading(
-        of(`Peek-a-boo ${this.loadCounter++}`).pipe(delay(2000)),
+        of(`Peek-a-boo ${this.loadCounter++}`).pipe(delay(1000)),
         this,
         LoadingIndicator.OPERATOR
       )
@@ -67,7 +66,7 @@ export class AppComponent implements OnInit {
     // don't forget to make them async-scheduled in manual scenarios!
     of(`Peek-a-boo ${this.loadCounter++}`, asyncScheduler)
       .pipe(
-        delay(6000),
+        delay(1500),
         untilDestroyed(this)
       )
       .subscribe(text => {

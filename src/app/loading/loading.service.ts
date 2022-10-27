@@ -1,6 +1,6 @@
 import {Injectable, NgZone} from '@angular/core';
-import {asyncScheduler, BehaviorSubject, Observable} from 'rxjs';
-import {finalize, observeOn} from 'rxjs/operators';
+import {Observable} from 'rxjs';
+import {finalize} from 'rxjs/operators';
 
 type LoadingContext = object;
 type LoaderId = string|number; // expected enum values
@@ -15,7 +15,7 @@ const DEFAULT_LOADER_ID: LoaderId = '_DEFAULT';
  * Q: How to change loading flag for a parent component?
  * A: Inject the parent component as a dependency to your constructor and
  *    call loadingService.setLoading(parentComponent, STATE).
- * 
+ *
  * Q: How to change loading flag for a child component?
  * A: Use a @ViewChild with component selector and pass the
  *    reference of the child to setLoading method.
@@ -31,9 +31,6 @@ export class LoadingService {
   // WeakMap will remove components from itself upon
   // their garbage collection by JS runtime.
   protected loadingStates = new WeakMap<LoadingContext, Map<LoaderId, boolean>>();
-  // Both loading state maps are kept in-sync such that
-  // they can be used by both sync and async methods.
-  protected loadingStates$ = new WeakMap<LoadingContext, Map<LoaderId, BehaviorSubject<boolean>>>();
 
   constructor(protected zoneRef: NgZone) {}
 
@@ -46,7 +43,6 @@ export class LoadingService {
     this.startLoading(context, loaderId);
 
     return source$.pipe(
-      observeOn(asyncScheduler),
       finalize(() => this.endLoading(context, loaderId)),
     );
   }
@@ -71,66 +67,31 @@ export class LoadingService {
     }
   }
 
-  // To be used in your html templates with async pipes.
-  // Returns an Observable of booleans indicating whether a given loader is active in a given context.
-  isLoading$(context: LoadingContext, loaderId?: LoaderId): Observable<boolean> {
-    const coalescedLoaderId = this.getLoaderId(loaderId);
-
-    if (!this.hasLoadingStates(context, coalescedLoaderId)) {
-      this.setLoadingState(context, false, loaderId);
-    }
-
-    return this.loadingStates$.get(context).get(coalescedLoaderId);
-  }
-
   // The startLoading and endLoading methods are intended to be used when handling
   // complex scenarios where a need for extended usage flexibility is desired.
   startLoading(context: LoadingContext, loaderId?: LoaderId): void {
-    this.setLoadingState(context, true, this.getLoaderId(loaderId));
+    this.setLoading(context, true, this.getLoaderId(loaderId));
   }
 
   endLoading(context: LoadingContext, loaderId?: LoaderId): void {
-    this.setLoadingState(context, false, this.getLoaderId(loaderId));
+    this.setLoading(context, false, this.getLoaderId(loaderId));
   }
 
   // To be called by middleware code (HTTP interceptors/routing listeners, etc.).
   clearLoadings(): void {
     this.loadingStates = new WeakMap<LoadingContext, Map<LoaderId, boolean>>();
-    this.loadingStates$ = new WeakMap<LoadingContext, Map<LoaderId, BehaviorSubject<boolean>>>();
   }
 
-  protected setLoadingState(context: LoadingContext, state: boolean, loaderId: LoaderId): void {
-    if (!this.hasLoadingStates(context, loaderId)) {
-      if (this.hasContextLoadingState(context)) {
-        this.loadingStates.get(context).set(loaderId, state);
-        this.loadingStates$.get(context).set(loaderId, new BehaviorSubject<boolean>(state));
-      }
-      else {
-        this.loadingStates.set(context, new Map<LoaderId, boolean>([
-          [loaderId, state]
-        ]));
-        this.loadingStates$.set(context, new Map<LoaderId, BehaviorSubject<boolean>>([
-          [loaderId, new BehaviorSubject<boolean>(state)]
-        ]));
-      }
+  protected setLoading(context: LoadingContext, state: boolean, loaderId: LoaderId): void {
+    if (!this.loadingStates.has(context)) {
+      this.loadingStates.set(context, new Map<LoaderId, boolean>([
+        [loaderId, state]
+      ]));
     }
     else {
       // @ts-ignore - loadingStates[context] is surely defined in this branch
       this.loadingStates.get(context).set(loaderId, state);
-      this.loadingStates$.get(context).get(loaderId).next(state);
     }
-  }
-
-  protected hasLoadingStates(context: LoadingContext, loaderId: LoaderId) {
-    return this.hasContextLoadingState(context) && this.hasLoaderLoadingState(context, loaderId);
-  }
-
-  protected hasContextLoadingState(context: LoadingContext) {
-    return this.loadingStates.has(context) && this.loadingStates$.has(context);
-  }
-
-  protected hasLoaderLoadingState(context: LoadingContext, loaderId: LoaderId) {
-    return this.loadingStates.get(context).has(loaderId) && this.loadingStates$.get(context).has(loaderId);
   }
 
   protected getLoaderId(loaderId?: LoaderId): LoaderId {
